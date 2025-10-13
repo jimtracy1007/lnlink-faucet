@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  faucet:
+    build: .
+    ports:
+      - "3009:3009"
+    volumes:
+      - ./volumes/db:/app/data
+      - ./volumes/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "file:/app/data/faucet.db"
+    restart: unless-stopped

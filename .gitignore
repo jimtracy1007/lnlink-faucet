@@ -1,0 +1,8 @@
+node_modules/
+faucet.db
+faucet.db-journal
+faucet.db-wal
+faucet.db-shm
+logs/
+*.log
+.DS_Store

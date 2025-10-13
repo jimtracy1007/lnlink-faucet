@@ -1,0 +1,10 @@
+node_modules
+faucet.db
+faucet.db-journal
+logs
+*.log
+.git
+.gitignore
+README.md
+todo.md
+.DS_Store

@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model FaucetRecord {
+  id           Int      @id @default(autoincrement())
+  nostrAddress String   @map("nostr_address")
+  claimTime    DateTime @default(now()) @map("claim_time")
+  amount       Float
+  status       String   // pending, success, failed
+  assetType    String   @map("asset_type") // btc, taproot, rgb
+  assetId      String   @map("asset_id")
+  assetName    String?  @map("asset_name")
+  txHash       String?  @map("tx_hash")
+  invoice      String?  // invoice or address
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([nostrAddress, claimTime])
+  @@map("faucet_records")
+}
