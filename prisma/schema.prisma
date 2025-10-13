@@ -18,9 +18,15 @@ model FaucetRecord {
   assetName    String?  @map("asset_name")
   txHash       String?  @map("tx_hash")
   invoice      String?  // invoice or address
+  queuedAt     DateTime? @map("queued_at")
+  confirmedAt  DateTime? @map("confirmed_at")
+  lastCheckAt  DateTime? @map("last_check_at")
+  retryCount   Int       @default(0) @map("retry_count")
+  feeRate      Int?     @map("fee_rate")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@index([nostrAddress, claimTime])
+  @@index([assetType, status, claimTime])
   @@map("faucet_records")
 }

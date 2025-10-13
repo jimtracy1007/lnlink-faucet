@@ -3,6 +3,7 @@ const express = require("express");
 const Logger = require("./logger");
 const faucetService = require("./faucetService");
 const { CAN_CLAIM_ASSETS } = require("./constant");
+const { startWorker } = require("./tasks/confirmationWorker");
 
 const app = express();
 const logger = new Logger("api");
@@ -160,4 +161,5 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   logger.info(`Faucet server started on port ${PORT}`);
+  startWorker();
 });
