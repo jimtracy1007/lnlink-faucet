@@ -209,14 +209,14 @@ class FaucetService {
     }
 
     try {
-      const status = await mempoolService.getTxStatus(record.txHash);
-      if (status?.status?.confirmed) {
+      const ret = await mempoolService.getTxStatus(record);
+      if (ret?.status?.confirmed) {
         await prisma.faucetRecord.update({
           where: { id: record.id },
           data: {
             status: "success",
-            confirmedAt: status.status.block_time
-              ? new Date(status.status.block_time * 1000)
+            confirmedAt: ret.status.block_time
+              ? new Date(ret.status.block_time * 1000)
               : new Date(),
             lastCheckAt: new Date(),
           },
@@ -474,7 +474,7 @@ class FaucetService {
     });
 
     const result = await sendMessage({ message, kind: 4 });
-     console.log("🚀 ~ FaucetService ~ executeClaim ~ result:", result)
+   
     logger.info("Claim result", {
       recordId: record.id,
       result,
