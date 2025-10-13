@@ -433,13 +433,20 @@ class FaucetService {
 
     // Prepare message for lnlink node
     let message = "";
-    if (assetType === ASSET_TYPE.BTC || !assetId) {
+    if (assetType === ASSET_TYPE.BTC_TAPROOT || !assetId) {
       message = this.combineQueryString("sendCoins", {
         addr: invoice,
         amount: amount,
         sat_per_vbyte: 3,
       });
-    } else if (assetType === ASSET_TYPE.TAPROOT) {
+    }
+    else if (assetType === ASSET_TYPE.BTC_RGB) {
+      message = this.combineQueryString("sendCoins", {
+        address: invoice,
+        amount: amount,
+      },"rgb");
+    }
+    else if (assetType === ASSET_TYPE.TAPROOT) {
       message = this.combineQueryString("sendTapdAssets", {
         tap_addrs: [invoice],
       });

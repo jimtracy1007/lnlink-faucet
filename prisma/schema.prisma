@@ -13,7 +13,7 @@ model FaucetRecord {
   claimTime    DateTime @default(now()) @map("claim_time")
   amount       Float
   status       String   // queued, waiting_confirmation, success, failed
-  assetType    String   @map("asset_type") // btc, taproot, rgb
+  assetType    String   @map("asset_type") // btc-taproot,btc-rgb, taproot, rgb
   assetId      String   @map("asset_id")
   assetName    String?  @map("asset_name")
   txHash       String?  @map("tx_hash")

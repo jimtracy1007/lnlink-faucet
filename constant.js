@@ -1,13 +1,21 @@
 const BTC_ID = "0x000000000000000000000000000000000000000";
 const ASSET_TYPE = {
-  BTC: "BTC",
+  BTC_TAPROOT: "BTC-TAPROOT",
+  BTC_RGB: "BTC-RGB",
   TAPROOT: "TAPROOT",
   RGB: "RGB",
 };
 
 const CAN_CLAIM_ASSETS = [
   {
-    assetType: ASSET_TYPE.BTC,
+    assetType: ASSET_TYPE.BTC_TAPROOT,
+    assetId: BTC_ID,
+    assetName: "BTC",
+    amount: 1000000,
+    decimals: 8,
+  },
+  {
+    assetType: ASSET_TYPE.BTC_RGB,
     assetId: BTC_ID,
     assetName: "BTC",
     amount: 1000000,
