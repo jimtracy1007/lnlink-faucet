@@ -89,9 +89,9 @@ class FaucetService {
       throw new Error("Invalid nostr address");
     }
 
-    const validAssetTypes = ["BTC", "TAPROOT", "RGB"];
+    const validAssetTypes = Object.values(ASSET_TYPE);
     if (!validAssetTypes.includes(assetType)) {
-      throw new Error("Invalid asset type. Must be: BTC, TAPROOT, or RGB");
+      throw new Error(`Invalid asset type. Must be: ${validAssetTypes.join(", ")}`);
     }
 
     if (!invoice || typeof invoice !== "string") {
@@ -469,7 +469,7 @@ class FaucetService {
     });
 
     const result = await sendMessage({ message, kind: 4 });
-    // console.log("🚀 ~ FaucetService ~ executeClaim ~ result:", result)
+     console.log("🚀 ~ FaucetService ~ executeClaim ~ result:", result)
     logger.info("Claim result", {
       recordId: record.id,
       result,
@@ -478,14 +478,18 @@ class FaucetService {
     // Update record based on result
     if (result && result.code === 0) {
       let txHash = "";
-      if (assetType === ASSET_TYPE.BTC) {
+      if (assetType === ASSET_TYPE.BTC_TAPROOT) {
         txHash = result.data?.txid;
-      } else if (assetType === ASSET_TYPE.TAPROOT) {
+      }
+      else if (assetType === ASSET_TYPE.BTC_RGB) {
+        txHash = result.data?.txid;
+      }
+      else if (assetType === ASSET_TYPE.TAPROOT) {
         txHash = result.data?.transfer?.anchor_tx_hash;
       } else if (assetType === ASSET_TYPE.RGB) {
         txHash = result.data?.txid;
       }
-      await this.markWaiting(record.id, result.data?.txid || null);
+      await this.markWaiting(record.id, txHash || null);
 
       logger.info("Faucet claim successful", {
         recordId: record.id,
