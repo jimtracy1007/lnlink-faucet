@@ -129,8 +129,12 @@ app.get("/api/admin/claims", async (req, res) => {
 // Check if user can claim specific asset
 app.get("/api/can-claim", async (req, res) => {
   try {
-    const { nostrAddress, assetId } = req.query;
-    const result = await faucetService.canClaim(nostrAddress, assetId);
+    const { nostrAddress, assetId, assetType } = req.query;
+    const result = await faucetService.canClaim(
+      nostrAddress,
+      assetId,
+      assetType
+    );
 
     res.json({
       code: 0,

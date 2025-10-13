@@ -13,7 +13,7 @@ class FaucetService {
    * Check if user can claim (rate limiting based on configured seconds)
    * Returns { canClaim: boolean, nextClaimTime: number|null, remainingSeconds: number|null }
    */
-  async canClaim(nostrAddress, assetId) {
+  async canClaim(nostrAddress, assetId, assetType) {
     const rateLimitSeconds =
       parseInt(process.env.CLAIM_RATE_LIMIT_SECONDS) || 86400; // Default 24 hours
     const limitTime = dayjs().subtract(rateLimitSeconds, "second").toDate();
@@ -22,6 +22,7 @@ class FaucetService {
       where: {
         nostrAddress,
         assetId,
+        assetType,
         claimTime: {
           gte: limitTime,
         },
@@ -351,7 +352,11 @@ class FaucetService {
         this.validateClaimRequest({ nostrAddress, assetType, invoice });
 
         if (!skipRateLimit) {
-          const claimCheck = await this.canClaim(nostrAddress, assetId);
+          const claimCheck = await this.canClaim(
+            nostrAddress,
+            assetId,
+            assetType
+          );
           if (!claimCheck.canClaim) {
             const hours = Math.floor(claimCheck.remainingSeconds / 3600);
             const minutes = Math.floor((claimCheck.remainingSeconds % 3600) / 60);
