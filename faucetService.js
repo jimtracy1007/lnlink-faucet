@@ -26,7 +26,7 @@ class FaucetService {
           gte: limitTime,
         },
         status: {
-          in: ["pending", "waiting_confirmation", "success", "queued"],
+          in: ["waiting_confirmation", "success", "queued"],
         },
       },
       orderBy: {
@@ -188,9 +188,7 @@ class FaucetService {
     return prisma.faucetRecord.findFirst({
       where: {
         assetType,
-        status: {
-          in: ["pending", "waiting_confirmation"],
-        },
+        status: "waiting_confirmation",
       },
       orderBy: {
         claimTime: "desc",
@@ -320,7 +318,7 @@ class FaucetService {
       const updatedRecord = await prisma.faucetRecord.update({
         where: { id: record.id },
         data: {
-          status: "pending",
+          status: "waiting_confirmation",
           lastCheckAt: new Date(),
           retryCount: record.retryCount + 1,
           claimTime: new Date(),
@@ -401,7 +399,7 @@ class FaucetService {
           data: {
             nostrAddress,
             amount,
-            status: "pending",
+            status: "waiting_confirmation",
             assetType,
             assetId: assetConfig.assetId || assetId || "",
             assetName,
@@ -513,7 +511,46 @@ class FaucetService {
       take: limit,
     });
 
-    return records;
+    const enriched = await Promise.all(
+      records.map(async (record) => {
+        if (record.status !== "queued") {
+          return { ...record, queuePosition: null };
+        }
+
+        const queuePosition =
+          (await prisma.faucetRecord.count({
+            where: {
+              assetType: record.assetType,
+              status: "queued",
+              OR: [
+                {
+                  claimTime: {
+                    lt: record.claimTime,
+                  },
+                },
+                {
+                  AND: [
+                    {
+                      claimTime: {
+                        equals: record.claimTime,
+                      },
+                    },
+                    {
+                      id: {
+                        lt: record.id,
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          })) + 1;
+
+        return { ...record, queuePosition };
+      })
+    );
+
+    return enriched;
   }
 
   /**

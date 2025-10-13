@@ -81,9 +81,9 @@ app.post("/api/claim", async (req, res) => {
 });
 
 // Get claim history for a user
-app.get("/api/history/:nostrAddress", async (req, res) => {
+app.get("/api/history", async (req, res) => {
   try {
-    const { nostrAddress } = req.params;
+    const { nostrAddress } = req.query;
     const limit = parseInt(req.query.limit) || 10;
 
     const history = await faucetService.getClaimHistory(nostrAddress, limit);

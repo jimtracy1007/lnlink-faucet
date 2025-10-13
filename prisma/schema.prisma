@@ -12,7 +12,7 @@ model FaucetRecord {
   nostrAddress String   @map("nostr_address")
   claimTime    DateTime @default(now()) @map("claim_time")
   amount       Float
-  status       String   // pending, success, failed
+  status       String   // queued, waiting_confirmation, success, failed
   assetType    String   @map("asset_type") // btc, taproot, rgb
   assetId      String   @map("asset_id")
   assetName    String?  @map("asset_name")
