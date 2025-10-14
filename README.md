@@ -1,7 +1,7 @@
 # LND Faucet
 
 基于LND和RGB的水龙头应用，通过Nostr与lnlink节点通信。
-
+https://gitlab.unift.xyz/lnfi/server/lnlink-faucet 
 ## 技术栈
 
 - Node.js + Express

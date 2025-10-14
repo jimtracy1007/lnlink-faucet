@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const cors = require("cors");
 const Logger = require("./logger");
 const faucetService = require("./faucetService");
 const { CAN_CLAIM_ASSETS } = require("./constant");
@@ -8,6 +9,9 @@ const app = express();
 const logger = new Logger("api");
 
 // Middleware
+if (process.env.ENV === "dev") {
+  app.use(cors());
+}
 app.use(express.json());
 
 // Request logging middleware
