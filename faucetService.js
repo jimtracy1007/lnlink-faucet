@@ -2,12 +2,10 @@ const { PrismaClient } = require("@prisma/client");
 const dayjs = require("dayjs");
 const Logger = require("./logger");
 const { sendMessage } = require("./nostrPool");
-const mempoolService = require("./mempoolService");
 
 const prisma = new PrismaClient();
 const logger = new Logger("faucet-service");
 const { ASSET_TYPE, CAN_CLAIM_ASSETS } = require("./constant");
-const assetLocks = new Map();
 class FaucetService {
   /**
    * Check if user can claim (rate limiting based on configured seconds)
@@ -27,7 +25,7 @@ class FaucetService {
           gte: limitTime,
         },
         status: {
-          in: ["waiting_confirmation", "success", "queued"],
+          in: ["pending", "success"],
         },
       },
       orderBy: {
@@ -61,21 +59,8 @@ class FaucetService {
   /**
    * Get claim amount from env
    */
-  resolveAssetConfig(assetType, assetId) {
-    if (assetId) {
-      const assetById = CAN_CLAIM_ASSETS.find(
-        (asset) => asset.assetId === assetId
-      );
-      if (assetById) {
-        return assetById;
-      }
-    }
-
-    return CAN_CLAIM_ASSETS.find((asset) => asset.assetType === assetType);
-  }
-
-  getClaimAmount(assetType, assetId) {
-    const asset = this.resolveAssetConfig(assetType, assetId);
+  getClaimAmount(assetId) {
+    const asset = CAN_CLAIM_ASSETS.find((asset) => asset.assetId === assetId);
     if (!asset) {
       throw new Error("Invalid asset id");
     }
@@ -117,226 +102,6 @@ class FaucetService {
     }
     return JSON.stringify(obj);
   }
-
-  getMaxRetryCount() {
-    const value = parseInt(process.env.MAX_RETRY_COUNT || "3", 10);
-    if (!Number.isInteger(value) || value <= 0) {
-      return 3;
-    }
-    return value;
-  }
-
-  async withAssetLock(assetType, callback) {
-    if (!assetType) {
-      return callback();
-    }
-
-    const last = assetLocks.get(assetType) || Promise.resolve();
-    let release;
-    const current = new Promise((resolve) => {
-      release = () => {
-        resolve();
-        if (assetLocks.get(assetType) === current) {
-          assetLocks.delete(assetType);
-        }
-      };
-    });
-
-    assetLocks.set(assetType, last.then(() => current));
-    await last;
-    try {
-      return await callback();
-    } finally {
-      release();
-    }
-  }
-
-  async enqueueClaim({
-    nostrAddress,
-    assetType,
-    assetId,
-    assetName,
-    invoice,
-    fee_rate,
-  }) {
-    const assetConfig = this.resolveAssetConfig(assetType, assetId);
-    const amount = assetConfig?.amount || 0;
-    const record = await prisma.faucetRecord.create({
-      data: {
-        nostrAddress,
-        amount,
-        status: "queued",
-        assetType,
-        assetId: assetConfig?.assetId || assetId || "",
-        assetName,
-        invoice,
-        queuedAt: new Date(),
-        retryCount: 0,
-        txHash: null,
-        feeRate: fee_rate || null,
-      },
-    });
-
-    const queuePosition = await prisma.faucetRecord.count({
-      where: {
-        assetType: record.assetType,
-        status: "queued",
-      },
-    });
-
-    return { record, queuePosition };
-  }
-
-  async getBlockingRecord(assetType) {
-    return prisma.faucetRecord.findFirst({
-      where: {
-        assetType,
-        status: "waiting_confirmation",
-      },
-      orderBy: {
-        claimTime: "desc",
-      },
-    });
-  }
-
-  async checkAndUpdateConfirmation(record) {
-    if (!record?.txHash) {
-      return false;
-    }
-
-    const maxRetry = this.getMaxRetryCount();
-    if (record.retryCount >= maxRetry) {
-      await this.markFailed(record.id, "Max retry count exceeded");
-      return false;
-    }
-
-    try {
-      const ret = await mempoolService.getTxStatus(record);
-      if (ret?.status?.confirmed) {
-        await prisma.faucetRecord.update({
-          where: { id: record.id },
-          data: {
-            status: "success",
-            confirmedAt: ret.status.block_time
-              ? new Date(ret.status.block_time * 1000)
-              : new Date(),
-            lastCheckAt: new Date(),
-          },
-        });
-        return true;
-      }
-
-      await prisma.faucetRecord.update({
-        where: { id: record.id },
-        data: {
-          lastCheckAt: new Date(),
-          retryCount: record.retryCount + 1,
-        },
-      });
-
-      const newRetryCount = record.retryCount + 1;
-      if (newRetryCount >= maxRetry) {
-        await this.markFailed(record.id, "Max retry count exceeded");
-      }
-    } catch (error) {
-      logger.warn("check confirmation failed", {
-        recordId: record.id,
-        error: error.message,
-      });
-    }
-
-    return false;
-  }
-
-  async findQueuedClaims(assetType) {
-    return prisma.faucetRecord.findMany({
-      where: {
-        assetType,
-        status: "queued",
-      },
-      orderBy: {
-        claimTime: "asc",
-      },
-    });
-  }
-
-  async getPendingConfirmations() {
-    return prisma.faucetRecord.findMany({
-      where: {
-        status: "waiting_confirmation",
-      },
-      orderBy: {
-        lastCheckAt: "asc",
-      },
-    });
-  }
-
-  async getAssetTypesWithQueue() {
-    const records = await prisma.faucetRecord.findMany({
-      where: {
-        status: "queued",
-      },
-      distinct: ["assetType"],
-      select: {
-        assetType: true,
-      },
-    });
-
-    return records.map((record) => record.assetType);
-  }
-
-  async markWaiting(recordId, txHash) {
-    await prisma.faucetRecord.update({
-      where: { id: recordId },
-      data: {
-        status: "waiting_confirmation",
-        txHash: txHash,
-        lastCheckAt: new Date(),
-      },
-    });
-  }
-
-  async markFailed(recordId, message) {
-    await prisma.faucetRecord.update({
-      where: { id: recordId },
-      data: {
-        status: "failed",
-        lastCheckAt: new Date(),
-      },
-    });
-
-    logger.error("Update record failed", {
-      recordId,
-      message,
-    });
-  }
-
-  async resumeQueuedClaim(record) {
-    return this.withAssetLock(record.assetType, async () => {
-      const maxRetry = this.getMaxRetryCount();
-      if (record.retryCount >= maxRetry) {
-        throw new Error("Max retry count exceeded");
-      }
-
-      const updatedRecord = await prisma.faucetRecord.update({
-        where: { id: record.id },
-        data: {
-          status: "waiting_confirmation",
-          lastCheckAt: new Date(),
-          retryCount: record.retryCount + 1,
-          claimTime: new Date(),
-        },
-      });
-
-      return this.executeClaim({
-        record: updatedRecord,
-        assetType: updatedRecord.assetType,
-        assetId: updatedRecord.assetId,
-        invoice: updatedRecord.invoice,
-        fee_rate: updatedRecord.feeRate || 3,
-      });
-    });
-  }
   /**
    * Process faucet claim
    */
@@ -349,9 +114,9 @@ class FaucetService {
     fee_rate = 3,
     rate_limit = false,
   }) {
-    return this.withAssetLock(assetType, async () => {
-      try {
-        this.validateClaimRequest({ nostrAddress, assetType, invoice });
+    try {
+      // Validate request
+      this.validateClaimRequest({ nostrAddress, assetType, invoice });
 
       const existingInvoice = await prisma.faucetRecord.findFirst({
         where: {
@@ -457,144 +222,43 @@ class FaucetService {
         } else if (assetType === ASSET_TYPE.RGB) {
           txHash = result.data?.txid;
         }
-
-        const blockingRecord = await this.getBlockingRecord(assetType);
-        if (blockingRecord) {
-          const confirmed = await this.checkAndUpdateConfirmation(blockingRecord);
-          if (!confirmed) {
-            const { queuePosition } = await this.enqueueClaim({
-              nostrAddress,
-              assetType,
-              assetId,
-              assetName,
-              invoice,
-              fee_rate,
-            });
-
-            return {
-              success: true,
-              status: "queued",
-              message:
-                "Previous transaction pending confirmation. Request queued.",
-              queuePosition,
-            };
-          }
-        }
-
-        const assetConfig = this.resolveAssetConfig(assetType, assetId);
-        const amount = assetConfig?.amount;
-        if (!amount) {
-          throw new Error("Invalid asset id");
-        }
-
-        const record = await prisma.faucetRecord.create({
+        await prisma.faucetRecord.update({
+          where: { id: record.id },
           data: {
             status: "success",
             txHash: txHash || null,
           },
         });
 
-        return this.executeClaim({
-          record,
-          assetType,
-          assetId: assetConfig.assetId || assetId,
-          invoice,
-          fee_rate,
+        logger.info("Faucet claim successful", {
+          recordId: record.id,
+          txHash: txHash,
         });
-      } catch (error) {
-        logger.error("Error processing claim", error.message);
-        throw error;
+        return {
+          success: true,
+          message: "Claim successful",
+          txHash: txHash,
+          amount,
+          assetType,
+        };
+      } else {
+        await prisma.faucetRecord.update({
+          where: { id: record.id },
+          data: {
+            status: "failed",
+          },
+        });
+
+        logger.error("Faucet claim failed", { recordId: record.id, result });
+
+        return {
+          success: false,
+          message: result?.message || "Claim failed",
+        };
       }
-    });
-  }
-
-  async executeClaim({ record, assetType, assetId, invoice, fee_rate = 3 }) {
-    const amount = record.amount;
-
-    logger.info("Created faucet claim record", {
-      recordId: record.id,
-      nostrAddress: record.nostrAddress,
-      assetType,
-    });
-
-    // Prepare message for lnlink node
-    let message = "";
-    if (assetType === ASSET_TYPE.BTC_TAPROOT || !assetId) {
-      message = this.combineQueryString("sendCoins", {
-        addr: invoice,
-        amount: amount,
-        sat_per_vbyte: 3,
-      });
-    }
-    else if (assetType === ASSET_TYPE.BTC_RGB) {
-      message = this.combineQueryString("sendCoins", {
-        address: invoice,
-        amount: amount,
-      },"rgb");
-    }
-    else if (assetType === ASSET_TYPE.TAPROOT) {
-      message = this.combineQueryString("sendTapdAssets", {
-        tap_addrs: [invoice],
-      });
-    } else if (assetType === ASSET_TYPE.RGB) {
-      message = this.combineQueryString(
-        "payRgbInvoice",
-        {
-          invoice: invoice,
-          amount: amount,
-          asset_id: assetId,
-          fee_rate: fee_rate,
-        },
-        "rgb"
-      );
-    }
-
-    // Send to nostr (lnlink node)
-    logger.info("Sending claim request to lnlink node", {
-      recordId: record.id,
-    });
-
-    const result = await sendMessage({ message, kind: 4 });
-   
-    logger.info("Claim result", {
-      recordId: record.id,
-      result,
-    });
-
-    // Update record based on result
-    if (result && result.code === 0) {
-      let txHash = "";
-      if (assetType === ASSET_TYPE.BTC_TAPROOT) {
-        txHash = result.data?.txid;
-      }
-      else if (assetType === ASSET_TYPE.BTC_RGB) {
-        txHash = result.data?.txid;
-      }
-      else if (assetType === ASSET_TYPE.TAPROOT) {
-        txHash = result.data?.transfer?.anchor_tx_hash;
-      } else if (assetType === ASSET_TYPE.RGB) {
-        txHash = result.data?.txid;
-      }
-      await this.markWaiting(record.id, txHash || null);
-
-      logger.info("Faucet claim successful", {
-        recordId: record.id,
-        txHash: txHash,
-      });
-      return {
-        success: true,
-        message: "Claim successful",
-        txHash: txHash,
-        amount,
-        assetType,
-      };
-    } else {
-      await this.markFailed(record.id, result?.message || "Claim failed");
-
-      return {
-        success: false,
-        message: result?.message || "Claim failed",
-      };
+    } catch (error) {
+      logger.error("Error processing claim", error.message);
+      throw error;
     }
   }
 
@@ -608,46 +272,7 @@ class FaucetService {
       take: limit,
     });
 
-    const enriched = await Promise.all(
-      records.map(async (record) => {
-        if (record.status !== "queued") {
-          return { ...record, queuePosition: null };
-        }
-
-        const queuePosition =
-          (await prisma.faucetRecord.count({
-            where: {
-              assetType: record.assetType,
-              status: "queued",
-              OR: [
-                {
-                  claimTime: {
-                    lt: record.claimTime,
-                  },
-                },
-                {
-                  AND: [
-                    {
-                      claimTime: {
-                        equals: record.claimTime,
-                      },
-                    },
-                    {
-                      id: {
-                        lt: record.id,
-                      },
-                    },
-                  ],
-                },
-              ],
-            },
-          })) + 1;
-
-        return { ...record, queuePosition };
-      })
-    );
-
-    return enriched;
+    return records;
   }
 
   /**

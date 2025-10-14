@@ -3,7 +3,6 @@ const express = require("express");
 const Logger = require("./logger");
 const faucetService = require("./faucetService");
 const { CAN_CLAIM_ASSETS } = require("./constant");
-const { startWorker } = require("./tasks/confirmationWorker");
 
 const app = express();
 const logger = new Logger("api");
@@ -130,11 +129,7 @@ app.get("/api/admin/claims", async (req, res) => {
 app.get("/api/can-claim", async (req, res) => {
   try {
     const { nostrAddress, assetId, assetType } = req.query;
-    const result = await faucetService.canClaim(
-      nostrAddress,
-      assetId,
-      assetType
-    );
+    const result = await faucetService.canClaim(nostrAddress, assetId, assetType);
 
     res.json({
       code: 0,
@@ -165,5 +160,4 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   logger.info(`Faucet server started on port ${PORT}`);
-  startWorker();
 });

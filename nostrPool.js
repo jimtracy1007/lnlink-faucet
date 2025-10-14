@@ -13,7 +13,7 @@ const dayjs = require("dayjs");
 
 // Enhanced pool configuration with better connection management
 const pool = new SimplePool({
-  getTimeout: 30 * 1000,
+  getTimeout: 20 * 1000,
   // Add connection verification options
   verifyEvent: true,
   // Ensure proper cleanup
@@ -90,7 +90,7 @@ async function sendMessage({ message, kind = 4 }) {
   const p = getPublicKey(LNLINK_OWNER_SK);
 
   const filter = {
-    since: event.created_at - 100,
+    since: event.created_at - 50,
     kinds: [4],
     "#e": [event.id],
     "#p": [p],
