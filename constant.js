@@ -23,16 +23,16 @@ const CAN_CLAIM_ASSETS = [
   },
   {
     assetType: ASSET_TYPE.TAPROOT,
-    assetId: "f7ac99f2c068f1157c787012f50cb043437505c309c6d8685e135cd8481b1e9d",
+    assetId: "efbfa303aa7d42579026d4af3f04b984d8360604442aab0842b94b35d00ede23",
     assetName: "USDT",
-    amount: 10 * 100,
+    amount: 1000 * 100,
     decimals: 2,
   },
   {
     assetType: ASSET_TYPE.RGB,
-    assetId: "rgb:cJ9fWFzO-snphAel-MC_HNrv-bp7s~n7-QqShKI5-LgA8Wys",
-    assetName: "RGB018",
-    amount: 10 * 100,
+    assetId: "rgb:ZbpeabIn-Wq80C9k-FsjcbkF-rx34LIv-joDSJbG-CRKzuEU",
+    assetName: "LINKRGB",
+    amount: 1000 * 100,
     decimals: 2,
   },
 ];

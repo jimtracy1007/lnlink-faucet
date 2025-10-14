@@ -90,9 +90,11 @@ class FaucetService {
       throw new Error("Invalid nostr address");
     }
 
-    const validAssetTypes = Object.values(ASSET_TYPE);
+    const validAssetTypes = ["BTC_TAPROOT", "BTC_RGB", "TAPROOT", "RGB"];
     if (!validAssetTypes.includes(assetType)) {
-      throw new Error(`Invalid asset type. Must be: ${validAssetTypes.join(", ")}`);
+      throw new Error(
+        "Invalid asset type. Must be: BTC_TAPROOT, BTC_RGB, TAPROOT, or RGB"
+      );
     }
 
     if (!invoice || typeof invoice !== "string") {
@@ -345,30 +347,115 @@ class FaucetService {
     assetName,
     assetId,
     fee_rate = 3,
-    skipRateLimit = true,
+    rate_limit = false,
   }) {
     return this.withAssetLock(assetType, async () => {
       try {
         this.validateClaimRequest({ nostrAddress, assetType, invoice });
 
-        if (!skipRateLimit) {
-          const claimCheck = await this.canClaim(
-            nostrAddress,
-            assetId,
-            assetType
-          );
-          if (!claimCheck.canClaim) {
-            const hours = Math.floor(claimCheck.remainingSeconds / 3600);
-            const minutes = Math.floor((claimCheck.remainingSeconds % 3600) / 60);
-            let timeStr = "";
-            if (hours > 0) timeStr += `${hours} hour${hours > 1 ? "s" : ""}`;
-            if (minutes > 0)
-              timeStr += `${hours > 0 ? " " : ""}${minutes} minute${
-                minutes > 1 ? "s" : ""
-              }`;
-            if (!timeStr) timeStr = `${claimCheck.remainingSeconds} seconds`;
-            throw new Error(`Please wait ${timeStr} before claiming again`);
-          }
+      const existingInvoice = await prisma.faucetRecord.findFirst({
+        where: {
+          invoice,
+        },
+      });
+
+      if (existingInvoice) {
+        return {
+          success: false,
+          message: "Invoice already submitted, please do not resubmit",
+        };
+      }
+
+      if (rate_limit) {
+        // Check rate limit
+        const claimCheck = await this.canClaim(
+          nostrAddress,
+          assetId,
+          assetType
+        );
+        if (!claimCheck.canClaim) {
+          const hours = Math.floor(claimCheck.remainingSeconds / 3600);
+          const minutes = Math.floor((claimCheck.remainingSeconds % 3600) / 60);
+          let timeStr = "";
+          if (hours > 0) timeStr += `${hours} hour${hours > 1 ? "s" : ""}`;
+          if (minutes > 0)
+            timeStr += `${hours > 0 ? " " : ""}${minutes} minute${
+              minutes > 1 ? "s" : ""
+            }`;
+          if (!timeStr) timeStr = `${claimCheck.remainingSeconds} seconds`;
+          throw new Error(`Please wait ${timeStr} before claiming again`);
+        }
+      }
+
+      // Get claim amount
+      const amount = this.getClaimAmount(assetId);
+
+      // Create pending record
+      const record = await prisma.faucetRecord.create({
+        data: {
+          nostrAddress,
+          amount,
+          status: "pending",
+          assetType,
+          assetId: assetId || "",
+          assetName: assetName,
+          invoice,
+        },
+      });
+
+      logger.info("Created faucet claim record", {
+        recordId: record.id,
+        nostrAddress,
+        assetType,
+      });
+
+      // Prepare message for lnlink node
+      let message = "";
+      if (
+        assetType === ASSET_TYPE.BTC_TAPROOT ||
+        assetType === ASSET_TYPE.BTC_RGB
+      ) {
+        message = this.combineQueryString("sendCoins", {
+          addr: invoice,
+          amount: amount,
+          sat_per_vbyte: 3,
+        });
+      } else if (assetType === ASSET_TYPE.TAPROOT) {
+        message = this.combineQueryString("sendTapdAssets", {
+          tap_addrs: [invoice],
+        });
+      } else if (assetType === ASSET_TYPE.RGB) {
+        message = this.combineQueryString(
+          "payRgbInvoice",
+          {
+            invoice: invoice,
+            amount: amount,
+            asset_id: assetId,
+            fee_rate: fee_rate,
+          },
+          "rgb"
+        );
+      }
+
+      // Send to nostr (lnlink node)
+      logger.info("Sending claim request to lnlink node", {
+        recordId: record.id,
+      });
+
+      const result = await sendMessage({ message, kind: 4 });
+
+      // Update record based on result
+      if (result && result.code === 0) {
+        let txHash = "";
+        if (
+          assetType === ASSET_TYPE.BTC_TAPROOT ||
+          assetType === ASSET_TYPE.BTC_RGB
+        ) {
+          txHash = result.data?.txid;
+        } else if (assetType === ASSET_TYPE.TAPROOT) {
+          txHash = result.data?.transfer?.anchor_tx_hash;
+        } else if (assetType === ASSET_TYPE.RGB) {
+          txHash = result.data?.txid;
         }
 
         const blockingRecord = await this.getBlockingRecord(assetType);
@@ -402,14 +489,8 @@ class FaucetService {
 
         const record = await prisma.faucetRecord.create({
           data: {
-            nostrAddress,
-            amount,
-            status: "waiting_confirmation",
-            assetType,
-            assetId: assetConfig.assetId || assetId || "",
-            assetName,
-            invoice,
-            feeRate: fee_rate || null,
+            status: "success",
+            txHash: txHash || null,
           },
         });
 
