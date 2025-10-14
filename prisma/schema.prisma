@@ -54,3 +54,14 @@ model TaskCompletion {
   @@index([nostrAddress])
   @@map("task_completions")
 }
+
+model LnlinkIdentity {
+  id           Int      @id @default(autoincrement())
+  nostrAddress String   @unique @map("nostr_address")
+  lnlinkNpub   String   @unique @map("lnlink_npub")
+  nodeType     String?  @map("node_type")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("lnlink_identities")
+}

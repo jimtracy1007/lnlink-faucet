@@ -84,11 +84,40 @@ yarn start:dev
 
 **GET** `/api/can-claim/:nostrAddress`
 
-### 4. 管理员查询所有记录
+### 4. lnlink 回调注册
+
+**POST** `/api/lnlink/callback`
+
+请求体：
+```json
+{
+  "nostrAddress": "npub1...",
+  "lnlinkNpub": "npub1...",
+  "nodeType": "lnnode"
+}
+```
+
+响应：
+```json
+{
+  "code": 0,
+  "data": {
+    "id": 1,
+    "nostrAddress": "npub1...",
+    "lnlinkNpub": "npub1...",
+    "nodeType": "lnnode"
+  },
+  "message": "success"
+}
+```
+
+> **说明**：`nostrAddress` 与 `lnlinkNpub` 均需唯一绑定，重复提交会返回 `409` 错误。
+
+### 5. 管理员查询所有记录
 
 **GET** `/api/admin/claims?page=1&pageSize=20`
 
-### 5. 查询任务列表（分组）
+### 6. 查询任务列表（分组）
 
 **GET** `/api/tasks`
 
@@ -108,7 +137,7 @@ yarn start:dev
 ]
 ```
 
-### 6. 查询用户任务完成情况
+### 7. 查询用户任务完成情况
 
 **GET** `/api/tasks/:nostrAddress`
 
@@ -123,7 +152,7 @@ yarn start:dev
 ]
 ```
 
-### 7. 更新任务完成状态
+### 8. 更新任务完成状态
 
 **POST** `/api/tasks/complete`
 
@@ -147,7 +176,7 @@ yarn start:dev
 
 任务重复提交会返回 `created: false`，并提示记录已存在。
 
-### 8. 健康检查
+### 9. 健康检查
 
 **GET** `/health`
 

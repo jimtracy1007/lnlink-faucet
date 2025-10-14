@@ -94,8 +94,10 @@ class TaskService {
     };
   }
 
-  async completeTask({ nostrAddress: rawNostrAddress, tag, meta }) {
+  async completeTask({ nostrAddress: rawNostrAddress, tag, meta, signature }) {
     const nostrAddress = this.normalizeNostrAddress(rawNostrAddress);
+    // TODO signature verification
+
     if (!nostrAddress) {
       throw new TaskServiceError("Invalid nostr address");
     }

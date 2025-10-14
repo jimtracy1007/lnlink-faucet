@@ -5,6 +5,10 @@ const Logger = require("./logger");
 const faucetService = require("./service/faucetService");
 const { CAN_CLAIM_ASSETS } = require("./constant");
 const { taskService, TaskServiceError } = require("./service/taskService");
+const {
+  lnlinkIdentityService,
+  LnlinkIdentityServiceError,
+} = require("./service/lnlinkIdentityService");
 
 const app = express();
 const logger = new Logger("api");
@@ -51,6 +55,40 @@ app.get("/api/assets", (req, res) => {
       code: 500,
       data: null,
       message: error.message,
+    });
+  }
+});
+
+// lnlink callback to register nostr <-> lnlink npub mapping
+app.post("/api/lnlink/callback", async (req, res) => {
+  try {
+    const { nostrAddress, lnlinkNpub, nodeType } = req.body;
+    const identity = await lnlinkIdentityService.registerIdentity({
+      nostrAddress,
+      lnlinkNpub,
+      nodeType,
+    });
+
+    res.json({
+      code: 0,
+      data: identity,
+      message: "success",
+    });
+  } catch (error) {
+    if (error instanceof LnlinkIdentityServiceError) {
+      logger.error("Lnlink callback error", error.message);
+      res.status(error.status || 400).json({
+        code: 400,
+        data: null,
+        message: error.message,
+      });
+      return;
+    }
+    logger.error("Lnlink callback error", error.message);
+    res.status(500).json({
+      code: 500,
+      data: null,
+      message: "Internal server error",
     });
   }
 });
@@ -155,33 +193,24 @@ app.get("/api/can-claim", async (req, res) => {
   }
 });
 
-// Get all active tasks grouped by category
+// Get all active tasks grouped by category or per user
 app.get("/api/tasks", async (req, res) => {
   try {
+    const { nostrAddress } = req.query;
+    if (nostrAddress) {
+      const grouped = await taskService.listTasksByUser(nostrAddress);
+      res.json({
+        code: 0,
+        data: grouped,
+        message: "success",
+      });
+      return;
+    }
+
     const tasks = await taskService.listAllTasks();
     res.json({
       code: 0,
       data: tasks,
-      message: "success",
-    });
-  } catch (error) {
-    logger.error("List tasks API error", error.message);
-    res.status(500).json({
-      code: 500,
-      data: null,
-      message: error.message,
-    });
-  }
-});
-
-// Get tasks for specific user
-app.get("/api/tasks", async (req, res) => {
-  try {
-    const { nostrAddress } = req.query;
-    const grouped = await taskService.listTasksByUser(nostrAddress);
-    res.json({
-      code: 0,
-      data: grouped,
       message: "success",
     });
   } catch (error) {
