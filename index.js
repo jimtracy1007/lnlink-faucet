@@ -2,8 +2,9 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const Logger = require("./logger");
-const faucetService = require("./faucetService");
+const faucetService = require("./service/faucetService");
 const { CAN_CLAIM_ASSETS } = require("./constant");
+const { taskService, TaskServiceError } = require("./service/taskService");
 
 const app = express();
 const logger = new Logger("api");
@@ -133,7 +134,11 @@ app.get("/api/admin/claims", async (req, res) => {
 app.get("/api/can-claim", async (req, res) => {
   try {
     const { nostrAddress, assetId, assetType } = req.query;
-    const result = await faucetService.canClaim(nostrAddress, assetId, assetType);
+    const result = await faucetService.canClaim(
+      nostrAddress,
+      assetId,
+      assetType
+    );
 
     res.json({
       code: 0,
@@ -146,6 +151,88 @@ app.get("/api/can-claim", async (req, res) => {
       code: 500,
       data: null,
       message: error.message,
+    });
+  }
+});
+
+// Get all active tasks grouped by category
+app.get("/api/tasks", async (req, res) => {
+  try {
+    const tasks = await taskService.listAllTasks();
+    res.json({
+      code: 0,
+      data: tasks,
+      message: "success",
+    });
+  } catch (error) {
+    logger.error("List tasks API error", error.message);
+    res.status(500).json({
+      code: 500,
+      data: null,
+      message: error.message,
+    });
+  }
+});
+
+// Get tasks for specific user
+app.get("/api/tasks", async (req, res) => {
+  try {
+    const { nostrAddress } = req.query;
+    const grouped = await taskService.listTasksByUser(nostrAddress);
+    res.json({
+      code: 0,
+      data: grouped,
+      message: "success",
+    });
+  } catch (error) {
+    if (error instanceof TaskServiceError) {
+      logger.error("List user tasks API error", error.message);
+      res.status(error.status || 400).json({
+        code: 400,
+        data: null,
+        message: error.message,
+      });
+      return;
+    }
+    logger.error("List user tasks API error", error.message);
+    res.status(500).json({
+      code: 500,
+      data: null,
+      message: "Internal server error",
+    });
+  }
+});
+
+// Complete task for user
+app.post("/api/tasks/complete", async (req, res) => {
+  try {
+    const { nostrAddress, tag, meta } = req.body;
+    const result = await taskService.completeTask({
+      nostrAddress,
+      tag,
+      meta,
+    });
+
+    res.json({
+      code: 0,
+      data: result,
+      message: "success",
+    });
+  } catch (error) {
+    if (error instanceof TaskServiceError) {
+      logger.error("Complete task API error", error.message);
+      res.status(error.status || 400).json({
+        code: 400,
+        data: null,
+        message: error.message,
+      });
+      return;
+    }
+    logger.error("Complete task API error", error.message);
+    res.status(500).json({
+      code: 500,
+      data: null,
+      message: "Internal server error",
     });
   }
 });
@@ -164,4 +251,12 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   logger.info(`Faucet server started on port ${PORT}`);
+  taskService
+    .ensureSeeded()
+    .then(() => {
+      logger.info("Task definitions ready");
+    })
+    .catch((error) => {
+      logger.error("Failed to seed task definitions on startup", error.message);
+    });
 });

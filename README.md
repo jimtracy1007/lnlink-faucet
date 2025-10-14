@@ -37,6 +37,7 @@ cp .env.example .env
 ```bash
 yarn prisma:generate
 yarn prisma:migrate
+yarn prisma:seed
 ```
 
 ### 4. 启动开发环境
@@ -87,7 +88,66 @@ yarn start:dev
 
 **GET** `/api/admin/claims?page=1&pageSize=20`
 
-### 5. 健康检查
+### 5. 查询任务列表（分组）
+
+**GET** `/api/tasks`
+
+响应示例：
+```json
+[
+  {
+    "category": "TAPROOT",
+    "tasks": [
+      {
+        "tag": "EnableTaprootAssetNode",
+        "displayName": "启用 Taproot Asset 节点",
+        "description": "启动 Taproot Asset 节点并完成基础设置"
+      }
+    ]
+  }
+]
+```
+
+### 6. 查询用户任务完成情况
+
+**GET** `/api/tasks/:nostrAddress`
+
+返回示例：
+```json
+[
+  {
+    "category": "TAPROOT",
+    "completed": [{ "tag": "EnableTaprootAssetNode", "completedAt": "..." }],
+    "pending": [{ "tag": "ClaimToTaprootNode" }]
+  }
+]
+```
+
+### 7. 更新任务完成状态
+
+**POST** `/api/tasks/complete`
+
+请求体：
+```json
+{
+  "nostrAddress": "npub1...",
+  "tag": "EnableTaprootAssetNode",
+  "meta": { "txHash": "..." }
+}
+```
+
+响应：
+```json
+{
+  "code": 0,
+  "data": { "created": true },
+  "message": "success"
+}
+```
+
+任务重复提交会返回 `created: false`，并提示记录已存在。
+
+### 8. 健康检查
 
 **GET** `/health`
 

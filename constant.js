@@ -23,8 +23,8 @@ const CAN_CLAIM_ASSETS = [
   },
   {
     assetType: ASSET_TYPE.TAPROOT,
-    assetId: "efbfa303aa7d42579026d4af3f04b984d8360604442aab0842b94b35d00ede23",
-    assetName: "LNLINK",
+    assetId: "1fdab5d00433cefae990dab0f4afd7c0cd542c6f51e0ab01168d3c7069320a5b",
+    assetName: "TEST",
     amount: 1000 * 100,
     decimals: 2,
   },

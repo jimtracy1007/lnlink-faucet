@@ -1,11 +1,11 @@
 const { PrismaClient } = require("@prisma/client");
 const dayjs = require("dayjs");
-const Logger = require("./logger");
-const { sendMessage } = require("./nostrPool");
+const Logger = require("../logger");
+const { sendMessage } = require("../nostrPool");
 
 const prisma = new PrismaClient();
 const logger = new Logger("faucet-service");
-const { ASSET_TYPE, CAN_CLAIM_ASSETS } = require("./constant");
+const { ASSET_TYPE, CAN_CLAIM_ASSETS } = require("../constant");
 class FaucetService {
   /**
    * Check if user can claim (rate limiting based on configured seconds)
