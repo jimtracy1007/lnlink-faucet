@@ -80,9 +80,9 @@ app.post("/api/claim", async (req, res) => {
 });
 
 // Get claim history for a user
-app.get("/api/history/:nostrAddress", async (req, res) => {
+app.get("/api/history", async (req, res) => {
   try {
-    const { nostrAddress } = req.params;
+    const { nostrAddress } = req.query;
     const limit = parseInt(req.query.limit) || 10;
 
     const history = await faucetService.getClaimHistory(nostrAddress, limit);
@@ -128,8 +128,8 @@ app.get("/api/admin/claims", async (req, res) => {
 // Check if user can claim specific asset
 app.get("/api/can-claim", async (req, res) => {
   try {
-    const { nostrAddress, assetId } = req.query;
-    const result = await faucetService.canClaim(nostrAddress, assetId);
+    const { nostrAddress, assetId, assetType } = req.query;
+    const result = await faucetService.canClaim(nostrAddress, assetId, assetType);
 
     res.json({
       code: 0,

@@ -11,7 +11,7 @@ class FaucetService {
    * Check if user can claim (rate limiting based on configured seconds)
    * Returns { canClaim: boolean, nextClaimTime: number|null, remainingSeconds: number|null }
    */
-  async canClaim(nostrAddress, assetId) {
+  async canClaim(nostrAddress, assetId, assetType) {
     const rateLimitSeconds =
       parseInt(process.env.CLAIM_RATE_LIMIT_SECONDS) || 86400; // Default 24 hours
     const limitTime = dayjs().subtract(rateLimitSeconds, "second").toDate();
@@ -20,6 +20,7 @@ class FaucetService {
       where: {
         nostrAddress,
         assetId,
+        assetType,
         claimTime: {
           gte: limitTime,
         },
@@ -74,9 +75,11 @@ class FaucetService {
       throw new Error("Invalid nostr address");
     }
 
-    const validAssetTypes = ["BTC", "TAPROOT", "RGB"];
+    const validAssetTypes = ["BTC_TAPROOT", "BTC_RGB", "TAPROOT", "RGB"];
     if (!validAssetTypes.includes(assetType)) {
-      throw new Error("Invalid asset type. Must be: BTC, TAPROOT, or RGB");
+      throw new Error(
+        "Invalid asset type. Must be: BTC_TAPROOT, BTC_RGB, TAPROOT, or RGB"
+      );
     }
 
     if (!invoice || typeof invoice !== "string") {
@@ -109,24 +112,44 @@ class FaucetService {
     assetName,
     assetId,
     fee_rate = 3,
+    rate_limit = false,
   }) {
     try {
       // Validate request
       this.validateClaimRequest({ nostrAddress, assetType, invoice });
 
-      // Check rate limit
-      const claimCheck = await this.canClaim(nostrAddress, assetId);
-      if (!claimCheck.canClaim) {
-        const hours = Math.floor(claimCheck.remainingSeconds / 3600);
-        const minutes = Math.floor((claimCheck.remainingSeconds % 3600) / 60);
-        let timeStr = "";
-        if (hours > 0) timeStr += `${hours} hour${hours > 1 ? "s" : ""}`;
-        if (minutes > 0)
-          timeStr += `${hours > 0 ? " " : ""}${minutes} minute${
-            minutes > 1 ? "s" : ""
-          }`;
-        if (!timeStr) timeStr = `${claimCheck.remainingSeconds} seconds`;
-        throw new Error(`Please wait ${timeStr} before claiming again`);
+      const existingInvoice = await prisma.faucetRecord.findFirst({
+        where: {
+          invoice,
+        },
+      });
+
+      if (existingInvoice) {
+        return {
+          success: false,
+          message: "Invoice already submitted, please do not resubmit",
+        };
+      }
+
+      if (rate_limit) {
+        // Check rate limit
+        const claimCheck = await this.canClaim(
+          nostrAddress,
+          assetId,
+          assetType
+        );
+        if (!claimCheck.canClaim) {
+          const hours = Math.floor(claimCheck.remainingSeconds / 3600);
+          const minutes = Math.floor((claimCheck.remainingSeconds % 3600) / 60);
+          let timeStr = "";
+          if (hours > 0) timeStr += `${hours} hour${hours > 1 ? "s" : ""}`;
+          if (minutes > 0)
+            timeStr += `${hours > 0 ? " " : ""}${minutes} minute${
+              minutes > 1 ? "s" : ""
+            }`;
+          if (!timeStr) timeStr = `${claimCheck.remainingSeconds} seconds`;
+          throw new Error(`Please wait ${timeStr} before claiming again`);
+        }
       }
 
       // Get claim amount
@@ -153,7 +176,10 @@ class FaucetService {
 
       // Prepare message for lnlink node
       let message = "";
-      if (assetType === ASSET_TYPE.BTC || !assetId) {
+      if (
+        assetType === ASSET_TYPE.BTC_TAPROOT ||
+        assetType === ASSET_TYPE.BTC_RGB
+      ) {
         message = this.combineQueryString("sendCoins", {
           addr: invoice,
           amount: amount,
@@ -186,7 +212,10 @@ class FaucetService {
       // Update record based on result
       if (result && result.code === 0) {
         let txHash = "";
-        if (assetType === ASSET_TYPE.BTC) {
+        if (
+          assetType === ASSET_TYPE.BTC_TAPROOT ||
+          assetType === ASSET_TYPE.BTC_RGB
+        ) {
           txHash = result.data?.txid;
         } else if (assetType === ASSET_TYPE.TAPROOT) {
           txHash = result.data?.transfer?.anchor_tx_hash;
@@ -197,7 +226,7 @@ class FaucetService {
           where: { id: record.id },
           data: {
             status: "success",
-            txHash: result.data?.txid || null,
+            txHash: txHash || null,
           },
         });
 
