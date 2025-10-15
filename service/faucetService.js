@@ -13,7 +13,7 @@ const taskDefinitionMap = {};
 taskDefinitions.forEach((task) => {
   taskDefinitionMap[task.tag] = task.tag;
 });
-console.log("taskDefinitionMap", taskDefinitionMap);
+
 class FaucetService {
   /**
    * Check if user can claim (rate limiting based on configured seconds)
@@ -223,27 +223,31 @@ class FaucetService {
         if (assetType === ASSET_TYPE.BTC_TAPROOT) {
           txHash = result.data?.txid;
           taskService.completeTask({
-            tag:taskDefinitionMap.ClaimToTaprootNode,
+            tag: taskDefinitionMap.ClaimToTaprootNode,
             nostrAddress,
-          })
+            skipSignatureVerification: true,
+          });
         } else if (assetType === ASSET_TYPE.BTC_RGB) {
           txHash = result.data?.txid;
           taskService.completeTask({
-            tag:taskDefinitionMap.ClaimBTCToRGBNode,
+            tag: taskDefinitionMap.ClaimBTCToRGBNode,
             nostrAddress,
-          })
+            skipSignatureVerification: true,
+          });
         } else if (assetType === ASSET_TYPE.TAPROOT) {
           txHash = result.data?.transfer?.anchor_tx_hash;
           taskService.completeTask({
-            tag:taskDefinitionMap.ClaimToTaprootNode,
+            tag: taskDefinitionMap.ClaimToTaprootNode,
             nostrAddress,
-          })
+            skipSignatureVerification: true,
+          });
         } else if (assetType === ASSET_TYPE.RGB) {
           txHash = result.data?.txid;
           taskService.completeTask({
-            tag:taskDefinitionMap.ClaimRGBToken,
+            tag: taskDefinitionMap.ClaimRGBToken,
             nostrAddress,
-          })
+            skipSignatureVerification: true,
+          });
         }
         await prisma.faucetRecord.update({
           where: { id: record.id },

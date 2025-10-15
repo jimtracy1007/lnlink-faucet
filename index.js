@@ -81,11 +81,12 @@ app.get("/api/register", async (req, res) => {
 // lnlink callback to register nostr <-> lnlink npub mapping
 app.post("/api/register", async (req, res) => {
   try {
-    const { nostrAddress, lnlinkNpub, nodeType } = req.body;
+    const { nostrAddress, lnlinkNpub, nodeType,signature } = req.body;
     const identity = await lnlinkIdentityService.registerIdentity({
       nostrAddress,
       lnlinkNpub,
       nodeType,
+      signature
     });
 
     res.json({

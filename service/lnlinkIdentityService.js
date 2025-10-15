@@ -1,6 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const Logger = require("../logger");
-
+const { nip04, nip19 } = require("nostr-tools");
 const prisma = new PrismaClient();
 const logger = new Logger("lnlink-identity-service");
 
@@ -16,6 +16,7 @@ class LnlinkIdentityService {
   async registerIdentity({
     nostrAddress: rawNostrAddress,
     lnlinkNpub: rawLnlinkNpub,
+    signature,
     nodeType,
   }) {
     const nostrAddress = this.normalize(rawNostrAddress);
@@ -31,6 +32,20 @@ class LnlinkIdentityService {
 
     await this.ensureNoConflicts({ nostrAddress, lnlinkNpub });
 
+    if (!signature) {
+      throw new LnlinkIdentityServiceError("Invalid signature");
+    }
+    try {
+      const sk = process.env.LNLINK_OWNER_SK;
+      const pubkey = nip19.decode(lnlinkNpub).data;
+      const decryptContent = await nip04.decrypt(sk, pubkey, signature);
+      const formatDecrypt = JSON.parse(decryptContent);
+      if (formatDecrypt.nostrAddress !== nostrAddress) {
+        throw new LnlinkIdentityServiceError("Invalid signature");
+      }
+    } catch (error) {
+      throw new LnlinkIdentityServiceError("Invalid signature");
+    }
     const identity = await prisma.lnlinkIdentity.upsert({
       where: {
         nostrAddress,
@@ -68,6 +83,27 @@ class LnlinkIdentityService {
         createdAt: "desc",
       },
     });
+  }
+
+  async getLnlinkNpubByNostr(nostrAddress) {
+    if (!this.normalize(nostrAddress)) {
+      throw new LnlinkIdentityServiceError("Invalid nostr address");
+    }
+
+    const identity = await prisma.lnlinkIdentity.findUnique({
+      where: {
+        nostrAddress,
+      },
+      select: {
+        lnlinkNpub: true,
+      },
+    });
+
+    if (!identity) {
+      throw new LnlinkIdentityServiceError("Identity not found", 404);
+    }
+
+    return identity.lnlinkNpub;
   }
 
   async ensureNoConflicts({ nostrAddress, lnlinkNpub }) {

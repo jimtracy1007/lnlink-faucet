@@ -4,7 +4,8 @@ const { seedTaskDefinitions } = require("../tasks/taskSeeder");
 
 const prisma = new PrismaClient();
 const logger = new Logger("task-service");
-
+const { nip04, nip19 } = require("nostr-tools");
+const { lnlinkIdentityService } = require("./lnlinkIdentityService");
 class TaskServiceError extends Error {
   constructor(message, status = 400) {
     super(message);
@@ -94,10 +95,36 @@ class TaskService {
     };
   }
 
-  async completeTask({ nostrAddress: rawNostrAddress, tag, meta, signature }) {
+  async completeTask({
+    nostrAddress: rawNostrAddress,
+    tag,
+    meta,
+    signature,
+    skipSignatureVerification = false,
+  }) {
     const nostrAddress = this.normalizeNostrAddress(rawNostrAddress);
-    // TODO signature verification
 
+    if (!skipSignatureVerification) {
+      if (!signature) {
+        throw new TaskServiceError("Invalid signature");
+      }
+      try {
+        // get lnlinkNpub from db
+        const lnlinkNpub = await lnlinkIdentityService.getLnlinkNpubByNostr(nostrAddress);
+        if(!lnlinkNpub){
+          throw new TaskServiceError("No lnlink npub found for nostr address");
+        }
+        const sk = process.env.LNLINK_OWNER_SK;
+        const pubkey = nip19.decode(lnlinkNpub).data;
+        const decryptContent = await nip04.decrypt(sk, pubkey, signature);
+        const formatDecrypt = JSON.parse(decryptContent);
+        if (formatDecrypt.nostrAddress !== nostrAddress) {
+          throw new TaskServiceError("Invalid signature");
+        }
+      } catch (error) {
+        throw new TaskServiceError("Invalid signature");
+      }
+    }
     if (!nostrAddress) {
       throw new TaskServiceError("Invalid nostr address");
     }
