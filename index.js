@@ -198,10 +198,23 @@ app.get("/api/tasks", async (req, res) => {
   try {
     const { nostrAddress } = req.query;
     if (nostrAddress) {
-      const grouped = await taskService.listTasksByUser(nostrAddress);
+      const [grouped, allTasks] = await Promise.all([
+        taskService.listTasksByUser(nostrAddress),
+        taskService.listAllTasks(),
+      ]);
+      const completed = grouped.reduce((accumulator, categoryGroup) => {
+        const completedWithCategory = categoryGroup.completed.map((task) => ({
+          ...task,
+          category: categoryGroup.category,
+        }));
+        return accumulator.concat(completedWithCategory);
+      }, []);
       res.json({
         code: 0,
-        data: grouped,
+        data: {
+          completed,
+          tasks: allTasks,
+        },
         message: "success",
       });
       return;
@@ -210,7 +223,7 @@ app.get("/api/tasks", async (req, res) => {
     const tasks = await taskService.listAllTasks();
     res.json({
       code: 0,
-      data: tasks,
+      data: { tasks },
       message: "success",
     });
   } catch (error) {
@@ -235,11 +248,12 @@ app.get("/api/tasks", async (req, res) => {
 // Complete task for user
 app.post("/api/tasks/complete", async (req, res) => {
   try {
-    const { nostrAddress, tag, meta } = req.body;
+    const { nostrAddress, tag, meta, signature } = req.body;
     const result = await taskService.completeTask({
       nostrAddress,
       tag,
       meta,
+      signature,
     });
 
     res.json({
