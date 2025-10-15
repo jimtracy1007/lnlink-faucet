@@ -6,6 +6,14 @@ const { sendMessage } = require("../nostrPool");
 const prisma = new PrismaClient();
 const logger = new Logger("faucet-service");
 const { ASSET_TYPE, CAN_CLAIM_ASSETS } = require("../constant");
+const { taskService } = require("./taskService");
+const taskDefinitions = require("../tasks/taskDefinitions");
+
+const taskDefinitionMap = {};
+taskDefinitions.forEach((task) => {
+  taskDefinitionMap[task.tag] = task.tag;
+});
+console.log("taskDefinitionMap", taskDefinitionMap);
 class FaucetService {
   /**
    * Check if user can claim (rate limiting based on configured seconds)
@@ -212,15 +220,30 @@ class FaucetService {
       // Update record based on result
       if (result && result.code === 0) {
         let txHash = "";
-        if (
-          assetType === ASSET_TYPE.BTC_TAPROOT ||
-          assetType === ASSET_TYPE.BTC_RGB
-        ) {
+        if (assetType === ASSET_TYPE.BTC_TAPROOT) {
           txHash = result.data?.txid;
+          taskService.completeTask({
+            tag:taskDefinitionMap.ClaimToTaprootNode,
+            nostrAddress,
+          })
+        } else if (assetType === ASSET_TYPE.BTC_RGB) {
+          txHash = result.data?.txid;
+          taskService.completeTask({
+            tag:taskDefinitionMap.ClaimBTCToRGBNode,
+            nostrAddress,
+          })
         } else if (assetType === ASSET_TYPE.TAPROOT) {
           txHash = result.data?.transfer?.anchor_tx_hash;
+          taskService.completeTask({
+            tag:taskDefinitionMap.ClaimToTaprootNode,
+            nostrAddress,
+          })
         } else if (assetType === ASSET_TYPE.RGB) {
           txHash = result.data?.txid;
+          taskService.completeTask({
+            tag:taskDefinitionMap.ClaimRGBToken,
+            nostrAddress,
+          })
         }
         await prisma.faucetRecord.update({
           where: { id: record.id },

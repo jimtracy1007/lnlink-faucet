@@ -59,8 +59,27 @@ app.get("/api/assets", (req, res) => {
   }
 });
 
+app.get("/api/register", async (req, res) => {
+  try {
+    const identities = await lnlinkIdentityService.listIdentities();
+
+    res.json({
+      code: 0,
+      data: { list:identities },
+      message: "success",
+    });
+  } catch (error) {
+    logger.error("List lnlink identities error", error.message);
+    res.status(500).json({
+      code: 500,
+      data: null,
+      message: "Internal server error",
+    });
+  }
+});
+
 // lnlink callback to register nostr <-> lnlink npub mapping
-app.post("/api/lnlink/callback", async (req, res) => {
+app.post("/api/register", async (req, res) => {
   try {
     const { nostrAddress, lnlinkNpub, nodeType } = req.body;
     const identity = await lnlinkIdentityService.registerIdentity({

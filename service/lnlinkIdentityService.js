@@ -55,6 +55,21 @@ class LnlinkIdentityService {
     return identity;
   }
 
+  async listIdentities() {
+    return prisma.lnlinkIdentity.findMany({
+      select: {
+        id: true,
+        nostrAddress: true,
+        lnlinkNpub: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+  }
+
   async ensureNoConflicts({ nostrAddress, lnlinkNpub }) {
     const existingByNostr = await prisma.lnlinkIdentity.findUnique({
       where: {
